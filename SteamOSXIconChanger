@@ -1,0 +1,125 @@
+#! /bin/bash
+
+#if [ "$1" == "-c" ]; then
+#	echo_file_sizes_content
+#	exit 0
+#fi
+
+PROGNAME=$(basename $0)
+
+help_contents () {
+	echo "Usage: SteamOSXIconChanger new_icon steam_app"
+}
+
+error_exit () {
+	echo -e "${PROGNAME}: ${1:-"Unknown Error"}" 1>&2
+	exit 1
+}
+
+if [ $# -ne 2 ]; then
+	error_exit "Incorrect usage\n$(help_contents)"
+fi
+
+NEW_ICON="$1"
+if [ ! -f "$NEW_ICON" ]; then
+	error_exit "The new icon specified does not exist."
+fi
+
+STEAM_APP_PATH="$2"
+if [ ! -d "$STEAM_APP_PATH" ]; then
+	error_exit "The Steam application does not exist at the specified path."
+fi
+
+ORIGINAL_FILE_SIZES_PATH="$STEAM_APP_PATH/Contents/MacOS/package/steam_client_osx.installed"
+if [ ! -f "$ORIGINAL_FILE_SIZES_PATH" ]; then
+	error_exit "Could not find the required file in the Steam application bundle: steam_client_osx.installed."
+fi
+ORIGINAL_FILE_SIZES_CONTENT=`cat $ORIGINAL_FILE_SIZES_PATH`
+if [ -z "$ORIGINAL_FILE_SIZES_CONTENT" ]; then
+	error_exit "Error reading the contents of the following file: steam_client_osx.installed."
+fi
+
+# Make temporary files
+RESULT=0
+FILE_SIZES_FILE_PATH=`mktemp -q -t steam`; RESULT=$(($RESULT+$?));
+BASIC_TGA_FILE_PATH=`mktemp -q -t steam`; RESULT=$(($RESULT+$?));
+ONLINE_TGA_FILE_PATH=`mktemp -q -t steam`; RESULT=$(($RESULT+$?));
+OFFLINE_TGA_FILE_PATH=`mktemp -q -t steam`; RESULT=$(($RESULT+$?));
+if [ $RESULT -ne 0 ]; then
+	error_exit "Could not create temporary files."
+fi
+
+RESULT=$(sips -s format tga -z 128 128 "$NEW_ICON" --out "$BASIC_TGA_FILE_PATH" 2>&1 | awk '$1 == "Error:" { print $0}')
+if [ -n "$RESULT" ]; then
+	error_exit "$RESULT"
+fi
+
+RESULT=$(sips -s format tga -z 128 128 "$NEW_ICON" --out "$ONLINE_TGA_FILE_PATH" 2>&1 | awk '$1 == "Error:" { print $0}')
+if [ -n "$RESULT" ]; then
+	error_exit "$RESULT"
+fi
+
+RESULT=$(sips -s format tga -z 128 128 "$NEW_ICON" --out "$OFFLINE_TGA_FILE_PATH" 2>&1 | awk '$1 == "Error:" { print $0}')
+if [ -n "$RESULT" ]; then
+	error_exit "$RESULT"
+fi
+
+NEW_ICON_FILE_SIZE=$(stat -f%z "$NEW_ICON")
+BASIC_TGA_FILE_SIZE=$(stat -f%z "$BASIC_TGA_FILE_PATH")
+ONLINE_TGA_FILE_SIZE=$(stat -f%z "$ONLINE_TGA_FILE_PATH")
+OFFLINE_TGA_FILE_SIZE=$(stat -f%z "$OFFLINE_TGA_FILE_PATH")
+
+ROOT="$STEAM_APP_PATH/Contents/MacOS"
+NEW_ICON_NAME="steam.icns"
+BASIC_TGA_NAME="Public/steam_tray_osx.tga"
+UPDATING_TGA_NAME="Public/steam_updating_osx.tga"
+CLOUDSYNC_TGA_NAME="Public/steam_cloudsync_osx.tga"
+OFFLINE_TGA_NAME="Public/steam_offline_osx.tga"
+
+ORIGINAL_FILE_SIZES_CONTENT=$(echo "$ORIGINAL_FILE_SIZES_CONTENT" | sed "s#$NEW_ICON_NAME,[0-9][0-9]*#$NEW_ICON_NAME,$NEW_ICON_FILE_SIZE#g")
+ORIGINAL_FILE_SIZES_CONTENT=$(echo "$ORIGINAL_FILE_SIZES_CONTENT" | sed "s#$BASIC_TGA_NAME,[0-9][0-9]*#$BASIC_TGA_NAME,$BASIC_TGA_FILE_SIZE#g")
+ORIGINAL_FILE_SIZES_CONTENT=$(echo "$ORIGINAL_FILE_SIZES_CONTENT" | sed "s#$UPDATING_TGA_NAME,[0-9][0-9]*#$UPDATING_TGA_NAME,$ONLINE_TGA_FILE_SIZE#g")
+ORIGINAL_FILE_SIZES_CONTENT=$(echo "$ORIGINAL_FILE_SIZES_CONTENT" | sed "s#$CLOUDSYNC_TGA_NAME,[0-9][0-9]*#$CLOUDSYNC_TGA_NAME,$ONLINE_TGA_FILE_SIZE#g")
+ORIGINAL_FILE_SIZES_CONTENT=$(echo "$ORIGINAL_FILE_SIZES_CONTENT" | sed "s#$OFFLINE_TGA_NAME,[0-9][0-9]*#$OFFLINE_TGA_NAME,$OFFLINE_TGA_FILE_SIZE#g")
+
+echo "$ORIGINAL_FILE_SIZES_CONTENT" > "$FILE_SIZES_FILE_PATH"
+
+
+ROOT="/Users/Ben/Desktop/"
+
+
+if [ ! -e "$STEAM_APP_PATH/Contents/Resources/$NEW_ICON_NAME.old" ]; then
+	mv "$STEAM_APP_PATH/Contents/Resources/$NEW_ICON_NAME" "$STEAM_APP_PATH/Contents/Resources/$NEW_ICON_NAME.old"
+fi
+cp "$NEW_ICON" "$STEAM_APP_PATH/Contents/Resources/$NEW_ICON_NAME"
+
+if [ ! -e "$ORIGINAL_FILE_SIZES_PATH.old" ]; then
+	mv "$ORIGINAL_FILE_SIZES_PATH" "$ORIGINAL_FILE_SIZES_PATH.old"
+fi
+cp "$FILE_SIZES_FILE_PATH" "$ORIGINAL_FILE_SIZES_PATH"
+
+if [ ! -e "$ROOT/$NEW_ICON_NAME.old" ]; then
+	mv "$ROOT/$NEW_ICON_NAME" "$ROOT/$NEW_ICON_NAME.old"
+fi
+cp "$NEW_ICON" "$ROOT/$NEW_ICON_NAME"
+
+if [ ! -e "$ROOT/$BASIC_TGA_NAME.old" ]; then
+	mv "$ROOT/$BASIC_TGA_NAME" "$ROOT/$BASIC_TGA_NAME.old"
+fi
+cp "$BASIC_TGA_FILE_PATH" "$ROOT/$BASIC_TGA_NAME"
+
+if [ ! -e "$ROOT/$UPDATING_TGA_NAME.old" ]; then
+	mv "$ROOT/$UPDATING_TGA_NAME" "$ROOT/$UPDATING_TGA_NAME.old" 
+fi
+cp "$ONLINE_TGA_FILE_PATH" "$ROOT/$UPDATING_TGA_NAME"
+
+if [ ! -e "$ROOT/$CLOUDSYNC_TGA_NAME.old" ]; then
+	mv "$ROOT/$CLOUDSYNC_TGA_NAME" "$ROOT/$CLOUDSYNC_TGA_NAME.old"
+fi
+cp "$ONLINE_TGA_FILE_PATH" "$ROOT/$CLOUDSYNC_TGA_NAME"
+
+if [ ! -e "$ROOT/$OFFLINE_TGA_NAME.old" ]; then
+	mv "$ROOT/$OFFLINE_TGA_NAME" "$ROOT/$OFFLINE_TGA_NAME.old"
+fi
+cp "$OFFLINE_TGA_FILE_PATH" "$ROOT/$OFFLINE_TGA_NAME"
+
