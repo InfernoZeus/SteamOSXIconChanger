@@ -84,10 +84,6 @@ ORIGINAL_FILE_SIZES_CONTENT=$(echo "$ORIGINAL_FILE_SIZES_CONTENT" | sed "s#$OFFL
 
 echo "$ORIGINAL_FILE_SIZES_CONTENT" > "$FILE_SIZES_FILE_PATH"
 
-
-ROOT="/Users/Ben/Desktop/"
-
-
 if [ ! -e "$STEAM_APP_PATH/Contents/Resources/$NEW_ICON_NAME.old" ]; then
 	mv "$STEAM_APP_PATH/Contents/Resources/$NEW_ICON_NAME" "$STEAM_APP_PATH/Contents/Resources/$NEW_ICON_NAME.old"
 fi
